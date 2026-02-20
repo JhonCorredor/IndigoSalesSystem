@@ -7,7 +7,7 @@ public interface IFileStorageService
     /// </summary>
     /// <param name="fileName">Nombre único del archivo con su extensión.</param>
     /// <param name="fileStream">Flujo de datos (Stream) del archivo físico.</param>
-    /// <returns>La URL pública donde quedó alojada la imagen.</returns>
+    /// <returns>El nombre del archivo almacenado.</returns>
     Task<string> UploadImageAsync(string fileName, Stream fileStream);
 
     /// <summary>
@@ -23,4 +23,19 @@ public interface IFileStorageService
     /// <param name="fileName">Nombre del archivo cuya URL se desea obtener.</param>
     /// <returns>La URL pública de la imagen.</returns>
     Task<string> GetImageUrlAsync(string fileName);
+
+    /// <summary>
+    /// Genera una URL temporal con SAS (Shared Access Signature) para acceder a una imagen privada.
+    /// </summary>
+    /// <param name="fileName">Nombre del archivo.</param>
+    /// <param name="expirationMinutes">Tiempo de validez del SAS en minutos. Por defecto 60 minutos.</param>
+    /// <returns>URL firmada con SAS token que permite acceso temporal de lectura.</returns>
+    Task<string> GetImageSasUrlAsync(string fileName, int expirationMinutes = 60);
+
+    /// <summary>
+    /// Descarga el contenido de una imagen como Stream.
+    /// </summary>
+    /// <param name="fileName">Nombre del archivo a descargar.</param>
+    /// <returns>Stream con el contenido de la imagen.</returns>
+    Task<Stream> DownloadImageAsync(string fileName);
 }

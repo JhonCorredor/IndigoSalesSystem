@@ -10,7 +10,8 @@ namespace Presentation.Api.Controllers;
 [Route("api/[controller]")]
 public class ProductsController(
     IProductRepository productRepository, 
-    IProductService productService) : ControllerBase
+    IProductService productService,
+    IFileStorageService fileStorageService) : ControllerBase
 {
     // DTOs ligeros para mapear las peticiones
     public record ProductUpdateDto(string Name, decimal Price, int Stock, string? ImageUrl);
@@ -21,11 +22,42 @@ public class ProductsController(
     // Usamos IFormFile para recibir la imagen física en la petición Multipart/Form-Data
     public record ProductCreateFormDto(string Name, decimal Price, int Stock, IFormFile? Image);
 
+    // DTO para response con SAS URL
+    public record ProductDto(Guid Id, string Name, decimal Price, int Stock, string? ImageUrl, string? ImageSasUrl);
+
     [HttpGet]
     public async Task<IActionResult> GetAll()
     {
         var products = await productRepository.GetAllAsync();
-        return Ok(products);
+
+        // Generar SAS URLs para cada producto que tenga imagen
+        var productsWithSas = new List<ProductDto>();
+        foreach (var product in products)
+        {
+            string? sasUrl = null;
+            if (!string.IsNullOrWhiteSpace(product.ImageUrl))
+            {
+                try
+                {
+                    sasUrl = await fileStorageService.GetImageSasUrlAsync(product.ImageUrl, expirationMinutes: 120);
+                }
+                catch
+                {
+                    // Si falla la generación de SAS, continuamos sin la URL
+                }
+            }
+
+            productsWithSas.Add(new ProductDto(
+                product.Id,
+                product.Name,
+                product.Price,
+                product.Stock,
+                product.ImageUrl,
+                sasUrl
+            ));
+        }
+
+        return Ok(productsWithSas);
     }
 
     [HttpGet("{id:guid}")]
@@ -33,7 +65,64 @@ public class ProductsController(
     {
         var product = await productRepository.GetByIdAsync(id);
         if (product is null) return NotFound(new { Message = "Producto no encontrado" });
-        return Ok(product);
+
+        // Generar SAS URL para la imagen
+        string? sasUrl = null;
+        if (!string.IsNullOrWhiteSpace(product.ImageUrl))
+        {
+            try
+            {
+                sasUrl = await fileStorageService.GetImageSasUrlAsync(product.ImageUrl, expirationMinutes: 120);
+            }
+            catch
+            {
+                // Si falla la generación de SAS, continuamos sin la URL
+            }
+        }
+
+        var productDto = new ProductDto(
+            product.Id,
+            product.Name,
+            product.Price,
+            product.Stock,
+            product.ImageUrl,
+            sasUrl
+        );
+
+        return Ok(productDto);
+    }
+
+    /// <summary>
+    /// Endpoint proxy para servir imágenes con autenticación.
+    /// Alternativa a SAS URLs cuando se necesita control total del acceso.
+    /// </summary>
+    [HttpGet("images/{fileName}")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetImage(string fileName)
+    {
+        try
+        {
+            var imageStream = await fileStorageService.DownloadImageAsync(fileName);
+
+            // Determinar ContentType basado en la extensión
+            var extension = Path.GetExtension(fileName).ToLowerInvariant();
+            var contentType = extension switch
+            {
+                ".jpg" or ".jpeg" => "image/jpeg",
+                ".png" => "image/png",
+                ".gif" => "image/gif",
+                ".webp" => "image/webp",
+                ".svg" => "image/svg+xml",
+                _ => "application/octet-stream"
+            };
+
+            return File(imageStream, contentType);
+        }
+        catch (FileNotFoundException)
+        {
+            return NotFound(new { Message = $"La imagen '{fileName}' no fue encontrada" });
+        }
     }
 
     [HttpPost]

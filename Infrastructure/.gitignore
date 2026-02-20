@@ -1,0 +1,25 @@
+# Ignore deployment outputs (contain sensitive data)
+outputs/
+*.outputs.txt
+
+# Ignore local parameters files (may contain secrets)
+parameters/*.local.json
+
+# Azure CLI cache
+.azure/
+
+# Bicep cache
+.bicep/
+
+# Temporary files
+*.tmp
+*.temp
+
+# IDE files
+.vs/
+.vscode/
+.idea/
+
+# OS files
+.DS_Store
+Thumbs.db

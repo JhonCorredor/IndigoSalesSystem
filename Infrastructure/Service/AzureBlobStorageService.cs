@@ -1,5 +1,6 @@
 ﻿using Azure.Storage.Blobs;
 using Azure.Storage.Blobs.Models;
+using Azure.Storage.Sas;
 using Core.Application.Interfaces;
 
 namespace Infrastructure.Services;
@@ -12,8 +13,8 @@ public class AzureBlobStorageService(string connectionString, string containerNa
     {
         var blobContainerClient = _blobServiceClient.GetBlobContainerClient(containerName);
 
-        // Aseguramos que el contenedor exista y sea de acceso público para lectura de imágenes
-        await blobContainerClient.CreateIfNotExistsAsync(PublicAccessType.Blob);
+        // Aseguramos que el contenedor exista en modo privado (sin acceso público)
+        await blobContainerClient.CreateIfNotExistsAsync(PublicAccessType.None);
 
         var blobClient = blobContainerClient.GetBlobClient(fileName);
 
@@ -32,8 +33,8 @@ public class AzureBlobStorageService(string connectionString, string containerNa
         // Subimos el archivo
         await blobClient.UploadAsync(fileStream, new BlobHttpHeaders { ContentType = contentType });
 
-        // Retornamos la URL pública
-        return blobClient.Uri.ToString();
+        // Retornamos solo el nombre del archivo (no la URL pública)
+        return fileName;
     }
 
     public async Task<bool> DeleteImageAsync(string fileName)
@@ -64,5 +65,50 @@ public class AzureBlobStorageService(string connectionString, string containerNa
         }
 
         throw new FileNotFoundException($"La imagen '{fileName}' no existe en el almacenamiento.");
+    }
+
+    public async Task<string> GetImageSasUrlAsync(string fileName, int expirationMinutes = 60)
+    {
+        var blobContainerClient = _blobServiceClient.GetBlobContainerClient(containerName);
+        var blobClient = blobContainerClient.GetBlobClient(fileName);
+
+        // Verificar si el blob existe
+        if (!await blobClient.ExistsAsync())
+        {
+            throw new FileNotFoundException($"La imagen '{fileName}' no existe en el almacenamiento.");
+        }
+
+        // Generar SAS token con permisos de lectura
+        var sasBuilder = new BlobSasBuilder
+        {
+            BlobContainerName = containerName,
+            BlobName = fileName,
+            Resource = "b", // b = blob
+            StartsOn = DateTimeOffset.UtcNow.AddMinutes(-5), // Margen de 5 min por diferencias de reloj
+            ExpiresOn = DateTimeOffset.UtcNow.AddMinutes(expirationMinutes)
+        };
+
+        // Permiso de lectura
+        sasBuilder.SetPermissions(BlobSasPermissions.Read);
+
+        // Generar la URL firmada con SAS
+        var sasUri = blobClient.GenerateSasUri(sasBuilder);
+        return sasUri.ToString();
+    }
+
+    public async Task<Stream> DownloadImageAsync(string fileName)
+    {
+        var blobContainerClient = _blobServiceClient.GetBlobContainerClient(containerName);
+        var blobClient = blobContainerClient.GetBlobClient(fileName);
+
+        // Verificar si el blob existe
+        if (!await blobClient.ExistsAsync())
+        {
+            throw new FileNotFoundException($"La imagen '{fileName}' no existe en el almacenamiento.");
+        }
+
+        // Descargar el contenido del blob
+        var response = await blobClient.DownloadAsync();
+        return response.Value.Content;
     }
 }
