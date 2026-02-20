@@ -1,0 +1,181 @@
+name: 🚀 Deploy Infrastructure to Azure
+
+on:
+  push:
+    branches: [ main, develop ]
+    paths:
+      - 'infrastructure/**'
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'infrastructure/**'
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to deploy'
+        required: true
+        default: 'dev'
+        type: choice
+        options:
+          - dev
+          - staging
+          - prod
+
+env:
+  AZURE_RESOURCE_GROUP_DEV: rg-indigo-sales-dev
+  AZURE_RESOURCE_GROUP_PROD: rg-indigo-sales-prod
+  AZURE_LOCATION: eastus
+
+jobs:
+  validate:
+    name: 🔍 Validate Bicep Templates
+    runs-on: ubuntu-latest
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🔐 Azure Login
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: 🔧 Setup Bicep
+        run: |
+          az bicep install
+          az bicep version
+
+      - name: ✅ Validate Bicep syntax
+        run: |
+          az bicep build --file infrastructure/main.bicep
+
+      - name: 🧪 Validate deployment (what-if)
+        run: |
+          ENV="${{ github.ref == 'refs/heads/main' && 'prod' || 'dev' }}"
+          RG="${{ github.ref == 'refs/heads/main' && env.AZURE_RESOURCE_GROUP_PROD || env.AZURE_RESOURCE_GROUP_DEV }}"
+          
+          az deployment group what-if \
+            --resource-group $RG \
+            --template-file infrastructure/main.bicep \
+            --parameters environment=$ENV \
+                         location=${{ env.AZURE_LOCATION }} \
+                         sqlAdminUsername=${{ secrets.SQL_ADMIN_USERNAME }} \
+                         sqlAdminPassword=${{ secrets.SQL_ADMIN_PASSWORD }} \
+                         jwtSecretKey=${{ secrets.JWT_SECRET_KEY }}
+
+  deploy-dev:
+    name: 🌱 Deploy to Development
+    needs: validate
+    if: github.ref == 'refs/heads/develop' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    environment:
+      name: development
+      url: https://indigo-sales-dev-api.azurewebsites.net
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🔐 Azure Login
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: 📦 Create Resource Group
+        run: |
+          az group create \
+            --name ${{ env.AZURE_RESOURCE_GROUP_DEV }} \
+            --location ${{ env.AZURE_LOCATION }} \
+            --tags Environment=dev Project="IndiGO Sales"
+
+      - name: 🚀 Deploy Infrastructure
+        run: |
+          az deployment group create \
+            --name "indigo-sales-$(date +%Y%m%d-%H%M%S)" \
+            --resource-group ${{ env.AZURE_RESOURCE_GROUP_DEV }} \
+            --template-file infrastructure/main.bicep \
+            --parameters environment=dev \
+                         location=${{ env.AZURE_LOCATION }} \
+                         sqlAdminUsername=${{ secrets.SQL_ADMIN_USERNAME }} \
+                         sqlAdminPassword=${{ secrets.SQL_ADMIN_PASSWORD }} \
+                         jwtSecretKey=${{ secrets.JWT_SECRET_KEY }} \
+            --output table
+
+      - name: 📊 Get Deployment Outputs
+        id: outputs
+        run: |
+          DEPLOYMENT_NAME=$(az deployment group list \
+            --resource-group ${{ env.AZURE_RESOURCE_GROUP_DEV }} \
+            --query "[0].name" -o tsv)
+          
+          WEB_APP_URL=$(az deployment group show \
+            --resource-group ${{ env.AZURE_RESOURCE_GROUP_DEV }} \
+            --name $DEPLOYMENT_NAME \
+            --query properties.outputs.webAppUrl.value -o tsv)
+          
+          echo "web_app_url=$WEB_APP_URL" >> $GITHUB_OUTPUT
+
+      - name: ✅ Deployment Summary
+        run: |
+          echo "### 🌱 Development Deployment Successful! 🎉" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Environment:** Development" >> $GITHUB_STEP_SUMMARY
+          echo "**Web App URL:** ${{ steps.outputs.outputs.web_app_url }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Region:** ${{ env.AZURE_LOCATION }}" >> $GITHUB_STEP_SUMMARY
+
+  deploy-prod:
+    name: 🚀 Deploy to Production
+    needs: validate
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+      url: https://indigo-sales-prod-api.azurewebsites.net
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🔐 Azure Login
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: 📦 Create Resource Group
+        run: |
+          az group create \
+            --name ${{ env.AZURE_RESOURCE_GROUP_PROD }} \
+            --location ${{ env.AZURE_LOCATION }} \
+            --tags Environment=prod Project="IndiGO Sales"
+
+      - name: 🚀 Deploy Infrastructure
+        run: |
+          az deployment group create \
+            --name "indigo-sales-$(date +%Y%m%d-%H%M%S)" \
+            --resource-group ${{ env.AZURE_RESOURCE_GROUP_PROD }} \
+            --template-file infrastructure/main.bicep \
+            --parameters environment=prod \
+                         location=${{ env.AZURE_LOCATION }} \
+                         sqlAdminUsername=${{ secrets.SQL_ADMIN_USERNAME }} \
+                         sqlAdminPassword=${{ secrets.SQL_ADMIN_PASSWORD }} \
+                         jwtSecretKey=${{ secrets.JWT_SECRET_KEY }} \
+            --output table
+
+      - name: 📊 Get Deployment Outputs
+        id: outputs
+        run: |
+          DEPLOYMENT_NAME=$(az deployment group list \
+            --resource-group ${{ env.AZURE_RESOURCE_GROUP_PROD }} \
+            --query "[0].name" -o tsv)
+          
+          WEB_APP_URL=$(az deployment group show \
+            --resource-group ${{ env.AZURE_RESOURCE_GROUP_PROD }} \
+            --name $DEPLOYMENT_NAME \
+            --query properties.outputs.webAppUrl.value -o tsv)
+          
+          echo "web_app_url=$WEB_APP_URL" >> $GITHUB_OUTPUT
+
+      - name: ✅ Deployment Summary
+        run: |
+          echo "### 🚀 Production Deployment Successful! 🎉" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Environment:** Production" >> $GITHUB_STEP_SUMMARY
+          echo "**Web App URL:** ${{ steps.outputs.outputs.web_app_url }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Region:** ${{ env.AZURE_LOCATION }}" >> $GITHUB_STEP_SUMMARY

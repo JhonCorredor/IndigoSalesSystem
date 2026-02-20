@@ -3,5 +3,6 @@
   <Project Path="Core.Domain/Core.Domain.csproj" />
   <Project Path="Infrastructure/Infrastructure.csproj" />
   <Project Path="Presentation.Api/Presentation.Api.csproj" />
+  <Project Path="Shared.Utilities/Shared.Utilities.csproj" />
   <Project Path="Tests.Unit/Tests.Unit.csproj" />
 </Solution>
