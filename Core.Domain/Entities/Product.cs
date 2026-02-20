@@ -1,34 +1,46 @@
-﻿namespace Core.Domain.Entities;
+﻿using Core.Domain.Common;
 
-// Uso de Primary Constructor de C# 12
-public class Product(Guid id, string name, decimal price, int stock, string? imageUrl)
+namespace Core.Domain.Entities;
+
+public class Product : BaseEntity
 {
-    public Guid Id { get; init; } = id;
-    public string Name { get; private set; } = name;
-    public decimal Price { get; private set; } = price;
-    public int Stock { get; private set; } = stock;
-    public string? ImageUrl { get; private set; } = imageUrl;
+    public string Name { get; private set; } = string.Empty;
+    public decimal Price { get; private set; }
+    public int Stock { get; private set; }
+    public string? ImageUrl { get; private set; }
 
-    // Método para el Update del CRUD
-    public void UpdateDetails(string name, decimal price, string? imageUrl)
+    private Product() { }
+
+    public Product(Guid id, string name, decimal price, int stock, string? imageUrl) : base(id)
     {
         Name = name;
         Price = price;
+        Stock = stock;
         ImageUrl = imageUrl;
     }
 
-    // Lógica de negocio encapsulada
+    public void UpdateDetails(string name, decimal price, int stock, string? imageUrl)
+    {
+        Name = name;
+        Price = price;
+        Stock = stock;
+        ImageUrl = imageUrl;
+        MarkAsUpdated();
+    }
+
     public void RemoveStock(int quantity)
     {
         if (quantity <= 0) throw new ArgumentException("La cantidad debe ser mayor a cero.");
         if (Stock < quantity) throw new InvalidOperationException($"Stock insuficiente para el producto {Name}.");
 
         Stock -= quantity;
+        MarkAsUpdated();
     }
 
     public void AddStock(int quantity)
     {
         if (quantity <= 0) throw new ArgumentException("La cantidad debe ser mayor a cero.");
         Stock += quantity;
+        MarkAsUpdated();
     }
 }

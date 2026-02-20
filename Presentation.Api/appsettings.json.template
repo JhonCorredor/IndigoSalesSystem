@@ -1,0 +1,22 @@
+{
+  "Logging": {
+    "LogLevel": {
+      "Default": "Information",
+      "Microsoft.AspNetCore": "Warning"
+    }
+  },
+  "AllowedHosts": "*",
+  "ConnectionStrings": {
+    "DefaultConnection": "Server=TU_SERVIDOR_AZURE;Database=TU_DATABASE;User Id=TU_USUARIO;Password=TU_PASSWORD;TrustServerCertificate=True;Encrypt=True;",
+    "BlobStorage": "DefaultEndpointsProtocol=https;AccountName=TU_STORAGE_ACCOUNT;AccountKey=TU_ACCOUNT_KEY;EndpointSuffix=core.windows.net"
+  },
+  "Jwt": {
+    "Key": "GENERA_UNA_CLAVE_SEGURA_DE_AL_MENOS_32_CARACTERES",
+    "Issuer": "IndigoSalesApi",
+    "Audience": "IndigoSalesClient"
+  },
+  "BlobStorageSettings": {
+    "ContainerName": "product-images",
+    "AccountName": "TU_STORAGE_ACCOUNT"
+  }
+}

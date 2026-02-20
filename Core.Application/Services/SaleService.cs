@@ -13,24 +13,46 @@ public class SaleService(IProductRepository productRepository, ISaleRepository s
         // 1. Definir Patrón de Resiliencia (Retry con Exponential Backoff)
         // Reintenta hasta 3 veces si ocurre un error transitorio, esperando 2, 4 y 8 segundos.
         var retryPolicy = Policy
-            .Handle<Exception>() // En un entorno real, filtraríamos por DbUpdateException o TimeoutException
+            .Handle<Exception>() 
             .WaitAndRetryAsync(3, retryAttempt => TimeSpan.FromSeconds(Math.Pow(2, retryAttempt)));
 
-        // 2. Ejecutar la lógica de negocio protegida por Polly
         return await retryPolicy.ExecuteAsync(async () =>
         {
-            var sale = new Sale(Guid.NewGuid(), DateTime.UtcNow);
+            // Validación anticipada: verificar stock de todos los productos antes de procesar
+            var stockErrors = new List<string>();
+            var productsToUpdate = new List<(Product Product, int Quantity)>();
 
             foreach (var item in request.Items)
             {
                 var product = await productRepository.GetByIdAsync(item.ProductId)
                     ?? throw new KeyNotFoundException($"El producto con ID {item.ProductId} no existe.");
 
-                // El Dominio valida si hay stock suficiente. Si no, lanza excepción y aborta.
-                product.RemoveStock(item.Quantity);
-                productRepository.Update(product);
+                if (product.Stock < item.Quantity)
+                {
+                    stockErrors.Add($"Stock insuficiente para '{product.Name}': disponible {product.Stock}, solicitado {item.Quantity}.");
+                }
+                else
+                {
+                    productsToUpdate.Add((product, item.Quantity));
+                }
+            }
 
-                sale.AddItem(product.Id, item.Quantity, product.Price);
+            // Si hay errores de stock, lanzar excepción con todos los detalles
+            if (stockErrors.Count > 0)
+            {
+                throw new InvalidOperationException(string.Join(" ", stockErrors));
+            }
+
+            // Procesar la venta solo si todos los productos tienen stock suficiente
+            // NOTA: Usar DateTime.Now para mantener consistencia con datos existentes en la BD
+            // (las ventas anteriores se guardaron con hora local de Colombia)
+            var sale = new Sale(Guid.NewGuid(), DateTime.Now);
+
+            foreach (var (product, quantity) in productsToUpdate)
+            {
+                product.RemoveStock(quantity);
+                productRepository.Update(product);
+                sale.AddItem(product.Id, quantity, product.Price);
             }
 
             await saleRepository.AddAsync(sale);

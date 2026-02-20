@@ -1,25 +1,62 @@
-﻿using Core.Application.Interfaces;
+﻿using System.Linq.Expressions;
+using Core.Application.Common;
+using Core.Application.DTOs;
+using Core.Application.Interfaces;
 using Core.Domain.Entities;
 using Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
+using Shared.Utilities.Mappers;
 
 namespace Infrastructure.Repositories;
 
-public class SaleRepository(ApplicationDbContext context) : ISaleRepository
+/// <summary>
+/// Repository implementation for Sale entity using Abstract Factory pattern.
+/// </summary>
+public class SaleRepository : ABaseRepository<Sale, SaleDto>, ISaleRepository
 {
-    public async Task<Sale?> GetByIdWithItemsAsync(Guid id) =>
-        await context.Sales
-            .Include(s => s.Items)
-            .FirstOrDefaultAsync(s => s.Id == id);
+    public SaleRepository(ApplicationDbContext context, IMapper<Sale, SaleDto> mapper) 
+        : base(context, mapper) { }
 
-    public async Task<IEnumerable<Sale>> GetSalesByDateRangeAsync(DateTime startDate, DateTime endDate) =>
-        await context.Sales
+    protected override IQueryable<Sale> GetQueryWithIncludes()
+    {
+        return DbSet
             .Include(s => s.Items)
-            .Where(s => s.Date >= startDate && s.Date <= endDate)
+                .ThenInclude(i => i.Product)
+            .AsSplitQuery();
+    }
+
+    protected override Expression<Func<Sale, object>> GetSortExpression(string sortBy)
+    {
+        return sortBy.ToLowerInvariant() switch
+        {
+            "date" => s => s.Date,
+            "total" => s => s.Total,
+            _ => base.GetSortExpression(sortBy)
+        };
+    }
+
+    public async Task<Sale?> GetByIdWithItemsAsync(Guid id)
+    {
+        return await GetQueryWithIncludes()
+            .FirstOrDefaultAsync(s => s.Id == id);
+    }
+
+    public async Task<IEnumerable<Sale>> GetSalesByDateRangeAsync(DateTime startDate, DateTime endDate)
+    {
+        return await GetQueryWithIncludes()
+            .Where(s => s.Date >= startDate && s.Date <= endDate && s.IsActive)
             .OrderByDescending(s => s.Date)
             .ToListAsync();
+    }
 
-    public async Task AddAsync(Sale sale) => await context.Sales.AddAsync(sale);
+    // Legacy interface methods
+    async Task ISaleRepository.AddAsync(Sale sale)
+    {
+        await base.AddAsync(sale);
+    }
 
-    public async Task<bool> SaveChangesAsync() => await context.SaveChangesAsync() > 0;
+    async Task<bool> ISaleRepository.SaveChangesAsync()
+    {
+        return await base.SaveChangesAsync() > 0;
+    }
 }

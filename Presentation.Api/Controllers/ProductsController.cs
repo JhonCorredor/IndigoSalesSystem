@@ -5,15 +5,21 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace Presentation.Api.Controllers;
 
-[cite_start]
-[Authorize] // Protege todo el CRUD de productos 
+[Authorize] 
 [ApiController]
 [Route("api/[controller]")]
-public class ProductsController(IProductRepository productRepository) : ControllerBase
+public class ProductsController(
+    IProductRepository productRepository, 
+    IProductService productService) : ControllerBase
 {
-    // DTOs ligeros (Records de C# 9+) para mapear las peticiones
-    public record ProductCreateDto(string Name, decimal Price, int Stock, string? ImageUrl);
-    public record ProductUpdateDto(string Name, decimal Price, string? ImageUrl);
+    // DTOs ligeros para mapear las peticiones
+    public record ProductUpdateDto(string Name, decimal Price, int Stock, string? ImageUrl);
+
+    // DTO para recibir imagen en base64 (para peticiones JSON desde frontend)
+    public record ProductCreateJsonDto(string Name, decimal Price, int Stock, string? ImageUrl);
+
+    // Usamos IFormFile para recibir la imagen física en la petición Multipart/Form-Data
+    public record ProductCreateFormDto(string Name, decimal Price, int Stock, IFormFile? Image);
 
     [HttpGet]
     public async Task<IActionResult> GetAll()
@@ -31,16 +37,63 @@ public class ProductsController(IProductRepository productRepository) : Controll
     }
 
     [HttpPost]
-    public async Task<IActionResult> Create([FromBody] ProductCreateDto request)
+    [Consumes("application/json")]
+    [ProducesResponseType(typeof(Product), StatusCodes.Status201Created)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> CreateFromJson([FromBody] ProductCreateJsonDto request)
     {
-        // El Dominio (Product) se encarga de inicializar su estado válido
-        var product = new Product(Guid.NewGuid(), request.Name, request.Price, request.Stock, request.ImageUrl);
+        Stream? imageStream = null;
+        string? fileName = null;
 
-        await productRepository.AddAsync(product);
-        await productRepository.SaveChangesAsync();
+        // Convertir base64 a Stream si hay imagen
+        if (!string.IsNullOrWhiteSpace(request.ImageUrl) && request.ImageUrl.Contains("base64,"))
+        {
+            try
+            {
+                // Extraer el base64 (remover el prefijo data:image/jpeg;base64,)
+                var base64Data = request.ImageUrl.Split(',')[1];
+                var imageBytes = Convert.FromBase64String(base64Data);
+                imageStream = new MemoryStream(imageBytes);
+
+                // Detectar extensión del tipo MIME
+                var mimeType = request.ImageUrl.Split(';')[0].Split(':')[1]; // image/jpeg
+                var extension = mimeType.Split('/')[1]; // jpeg
+                fileName = $"{Guid.NewGuid()}.{extension}";
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { Message = "Formato de imagen base64 inválido", Error = ex.Message });
+            }
+        }
+
+        var product = await productService.CreateProductAsync(
+            request.Name,
+            request.Price,
+            request.Stock,
+            imageStream,
+            fileName
+        );
 
         return CreatedAtAction(nameof(GetById), new { id = product.Id }, product);
     }
+
+    [HttpPost("upload")]
+    [Consumes("multipart/form-data")]
+    [ProducesResponseType(typeof(Product), StatusCodes.Status201Created)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> CreateFromForm([FromForm] ProductCreateFormDto request)
+    {
+        var product = await productService.CreateProductAsync(
+            request.Name,
+            request.Price,
+            request.Stock,
+            request.Image?.OpenReadStream(),
+            request.Image?.FileName
+        );
+
+        return CreatedAtAction(nameof(GetById), new { id = product.Id }, product);
+    }
+
 
     [HttpPut("{id:guid}")]
     public async Task<IActionResult> Update(Guid id, [FromBody] ProductUpdateDto request)
@@ -49,7 +102,7 @@ public class ProductsController(IProductRepository productRepository) : Controll
         if (product is null) return NotFound(new { Message = "Producto no encontrado" });
 
         // Usamos el método de dominio para actualizar, no setters públicos directos
-        product.UpdateDetails(request.Name, request.Price, request.ImageUrl);
+        product.UpdateDetails(request.Name, request.Price, request.Stock, request.ImageUrl);
 
         productRepository.Update(product);
         await productRepository.SaveChangesAsync();
