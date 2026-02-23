@@ -28,24 +28,23 @@ Sistema de gestión de ventas desarrollado con **.NET 8** siguiendo principios d
 ## ✨ Características
 
 ### 🔐 Seguridad
-- Autenticación JWT con roles (Admin, Manager, Seller, Viewer, Guest)
+- Autenticación JWT 
 - Encriptación de contraseñas con **BCrypt**
 - Manejo global de excepciones con middleware personalizado
-- CORS configurado para aplicaciones Angular
 
 ### 📦 Gestión de Productos
 - CRUD completo de productos
 - Subida de imágenes a **Azure Blob Storage**
 - Control de stock con validación de negocio
 - Soft delete (desactivación lógica)
-- Paginación y filtrado avanzado
+- Paginación y filtrado 
 
 ### 💰 Gestión de Ventas
 - Registro de ventas con múltiples items
 - Validación de stock en tiempo real
 - Cálculo automático de totales
 - Patrón de resiliencia con **Polly** (retry con exponential backoff)
-- Transacciones atómicas
+
 
 ### 🏗️ Arquitectura
 - **Clean Architecture** (Cebolla)
@@ -53,7 +52,6 @@ Sistema de gestión de ventas desarrollado con **.NET 8** siguiendo principios d
 - **Abstract Factory Pattern** para repositorios genéricos
 - **Repository Pattern** con Unit of Work
 - **Dependency Injection** nativo de .NET
-- **CQRS** preparado para escalabilidad
 
 ---
 
@@ -111,9 +109,6 @@ Sistema de gestión de ventas desarrollado con **.NET 8** siguiendo principios d
 ### Azure Services
 - **Azure SQL Database** - Base de datos en la nube
 - **Azure Blob Storage** - Almacenamiento de imágenes
-- **Azure App Service** - Hosting de la API
-- **Azure Key Vault** - Gestión de secretos (preparado)
-- **Azure Application Insights** - Monitoreo (preparado)
 
 ### Bibliotecas y Paquetes
 - **BCrypt.Net** - Encriptación de contraseñas
@@ -121,8 +116,6 @@ Sistema de gestión de ventas desarrollado con **.NET 8** siguiendo principios d
 - **Swashbuckle** - Documentación OpenAPI/Swagger
 - **xUnit** - Framework de testing
 - **Moq** - Mocking para tests
-- **FluentAssertions** - Assertions legibles
-
 ---
 
 ## 📁 Estructura del Proyecto
@@ -349,24 +342,6 @@ az deployment group create \
   --resource-group rg-indigo-sales \
   --template-file Infrastructure/main.bicep \
   --parameters Infrastructure/parameters/dev.parameters.json
-
-# Desplegar aplicación
-dotnet publish -c Release
-az webapp deploy --name indigo-sales-api --resource-group rg-indigo-sales --src-path ./publish.zip
-```
-
-### Docker (opcional)
-
-```bash
-# Build
-docker build -t indigo-sales-api .
-
-# Run
-docker run -p 8080:80 \
-  -e ConnectionStrings__DefaultConnection="<connection-string>" \
-  indigo-sales-api
-```
-
 ---
 
 ## 📡 API Endpoints
@@ -381,22 +356,8 @@ docker run -p 8080:80 \
 **Login Request:**
 ```json
 {
-  "username": "admin",
-  "password": "admin123"
-}
-```
-
-**Login Response:**
-```json
-{
-  "success": true,
-  "data": {
-    "token": "eyJhbGciOiJIUzI1NiIs...",
-    "username": "admin",
-    "fullName": "System Administrator",
-    "role": "Admin",
-    "expiresAt": "2026-02-20T12:00:00Z"
-  }
+  "username": "super",
+  "password": "super123"
 }
 ```
 
@@ -462,10 +423,9 @@ Image: [archivo]
 - ✅ Validación de entrada en todos los endpoints
 - ✅ Parametrized queries (EF Core)
 - ✅ HTTPS obligatorio en producción
-- ✅ JWT con expiración configurable
+- ✅ JWT
 - ✅ BCrypt para hash de contraseñas
 - ✅ Soft delete para auditoría
-- ✅ CORS restrictivo
 
 ### 📊 Buenas Prácticas
 
@@ -475,7 +435,7 @@ Image: [archivo]
 - ✅ Excepciones personalizadas por tipo
 - ✅ Respuestas API estandarizadas
 - ✅ Logging estructurado
-- ✅ Tests unitarios con AAA pattern
+- ✅ Tests unitarios 
 - ✅ Migraciones versionadas
 - ✅ Seed data para desarrollo
 
@@ -487,7 +447,7 @@ Image: [archivo]
 
 | Username | Password | Rol | Email |
 |----------|----------|-----|-------|
-| `admin` | `admin123` | Admin | admin@indigosales.com |
+| `super` | `super123` | Super | super@indigosales.com |
 | `manager` | `admin123` | Manager | manager@indigosales.com |
 | `seller1` | `admin123` | Seller | seller1@indigosales.com |
 | `seller2` | `admin123` | Seller | seller2@indigosales.com |
@@ -500,23 +460,6 @@ Image: [archivo]
 
 ---
 
-## 📚 Documentación Adicional
-
-- [ARCHITECTURE.md](ARCHITECTURE.md) - Detalles de arquitectura
-- [Swagger UI](https://localhost:5001/swagger) - Documentación interactiva de API
-- [Azure DevOps Wiki](https://dev.azure.com) - Documentación completa (si aplica)
-
----
-
-## 🤝 Contribución
-
-1. Fork el proyecto
-2. Crea tu rama de feature (`git checkout -b feature/AmazingFeature`)
-3. Commit tus cambios (`git commit -m 'Add some AmazingFeature'`)
-4. Push a la rama (`git push origin feature/AmazingFeature`)
-5. Abre un Pull Request
-
----
 
 ## 📝 Licencia
 
